@@ -6,3 +6,6 @@
 __pycache__/
 
 /dashboards/.ipynb_checkpoints/
+/data/
+/docs/~*.docx
+/trading/stats/
