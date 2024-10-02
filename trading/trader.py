@@ -265,6 +265,7 @@ if __name__ == '__main__':
                 HighConviction(name='HiCon'),
                 Indiscriminate(name='Indiscriminate')]
     traders = [ OptimizingTrader(name='Luddite',avoidSectors='USIT USHT USHE'.split(),risk_multiplier = 3.0 )]
+    traders = [OptimizingTrader(name='Luddite2', avoidSectors='USIT USHT USHE'.split(), risk_multiplier=3.0, txn_cost_multiplier=3.0)]
     ##traders = [OptimizingTrader(name='OldSchool')]
 
     guild = Guild(traders)

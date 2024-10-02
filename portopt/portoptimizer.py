@@ -57,7 +57,7 @@ class PortOptimizer:
         assert self.txn_costs.shape == (self.num_assets,)
         assert self.shorting_costs.shape == (self.num_assets,)
 
-    def solve(self, show_progress = False,maxiters = None, feastol=1e-9, abstol=1e-9 ) -> dict:
+    def solve(self, show_progress = False,maxiters = None, feastol=1e-9, abstol=1e-9, solver = None ) -> dict:
         ''' Solve the portfolio optimization problem
             @return: Optimal portfolio positions, optimal portfolio trades
         '''
@@ -70,7 +70,7 @@ class PortOptimizer:
         cvxopt.solvers.options['feastol'] = feastol
         cvxopt.solvers.options['abstol'] = abstol
 
-        sol = cvxopt.solvers.qp(cvxopt.matrix(P), cvxopt.matrix(q), cvxopt.matrix(G), cvxopt.matrix(h), cvxopt.matrix(A), cvxopt.matrix(b))
+        sol = cvxopt.solvers.qp(cvxopt.matrix(P), cvxopt.matrix(q), cvxopt.matrix(G), cvxopt.matrix(h), cvxopt.matrix(A), cvxopt.matrix(b), solver=solver)
         if sol['status'] != 'optimal':
             raise Exception("Optimization did not converge - status: %s" % sol['status'])
         else:
