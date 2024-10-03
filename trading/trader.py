@@ -158,10 +158,21 @@ class OptimizingTrader(Trader):
                 sectorBounds.append(bound)
 
         VCV = risk_data['assetVCV'] + np.diag(risk_data['assetResidualVar'])
-        self.optimizer = PortOptimizer(VCV,initialWeights,alphas,txn_costs,shorting_costs,self.risk_multiplier,self.alpha_multiplier,
+        attempt = 0
+        converged = False
+        prev_weights = initialWeights
+        while not converged and attempt < 10:
+            self.optimizer = PortOptimizer(VCV,initialWeights,alphas,txn_costs,shorting_costs,self.risk_multiplier,self.alpha_multiplier,
                                    self.txn_cost_multiplier,self.shorting_cost_multiplier,self.max_concentration,weight_bounds=sectorBounds)
-        solution = self.optimizer.solve()
-        return solution['optPositions']
+            solution = self.optimizer.solve()
+            weights = solution['optPositions']
+            if sum(abs(weights - prev_weights)) < .01:
+                logging.debug('Converged after %d iterations',attempt)
+                converged = True
+            prev_weights = weights
+        if not converged:
+            logging.warning('Did not converge after %d iterations',attempt)
+        return weights
 
 class HighConviction(Trader):
     ''' Trader that trades based on alpha only - top x% long, botton x% short - equally weighted'''
@@ -265,7 +276,12 @@ if __name__ == '__main__':
                 HighConviction(name='HiCon'),
                 Indiscriminate(name='Indiscriminate')]
     traders = [ OptimizingTrader(name='Luddite',avoidSectors='USIT USHT USHE'.split(),risk_multiplier = 3.0 )]
-    traders = [OptimizingTrader(name='Luddite2', avoidSectors='USIT USHT USHE'.split(), risk_multiplier=3.0, txn_cost_multiplier=3.0)]
+    traders = [
+        OptimizingTrader(name='Luddite1_1', avoidSectors='USIT USHT USHE'.split(), risk_multiplier=1.0),
+        OptimizingTrader(name='Luddite3_1', avoidSectors='USIT USHT USHE'.split(), risk_multiplier=3.0, txn_cost_multiplier=3.0),
+        OptimizingTrader(name='Luddite5_1', avoidSectors='USIT USHT USHE'.split(), risk_multiplier=3.0, txn_cost_multiplier=5.0),
+        OptimizingTrader(name='Luddite10_1', avoidSectors='USIT USHT USHE'.split(), risk_multiplier=3.0, txn_cost_multiplier=10.0)
+    ]
     ##traders = [OptimizingTrader(name='OldSchool')]
 
     guild = Guild(traders)

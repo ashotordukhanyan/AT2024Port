@@ -68,6 +68,8 @@ def generateStatsSheet(trader_name:str,stats_directory:str,checkpoints:List[date
     portCheckPointStats = gb.agg(agg_rules)
     portCheckPointStats['shortingCost'] = portCheckPointStats['shortingCost'] * 4/52 ##annualize
     portCheckPointStats['grossReturn'] = checkpointReturns
+    portCheckPointStats['Portfolio Returns % (Gross)'] = portCheckPointStats['grossReturn']/100.0
+    portCheckPointStats['Transaction & Shorting Costs %'] = (portCheckPointStats['rebalCost'] + portCheckPointStats['shortingCost'])/100.0
     portRebalDf['grossReturn'] = dailyReturns
     portCheckPointBetas = portBetaDF[checkpoints]
 
@@ -190,7 +192,7 @@ def _clean(x):
 
 if __name__ == '__main__':
     checkpoints = [date(2017,12,27) + timedelta(weeks=4*i) for i in range(87)]
-    trader_name = 'Luddite2'
+    trader_name = 'Luddite10'
     stats_directory = '../trading/stats'
     filename = generateStatsSheet(trader_name,stats_directory,checkpoints)
     print(filename)
