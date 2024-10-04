@@ -5,6 +5,7 @@ import logging
 
 class TestRiskCalculator(unittest.TestCase):
     def setUp(self) -> None:
+        logging.basicConfig(level=logging.DEBUG)
         self.loaderClasses = [RiskFactorExposuresLoader, RiskCorrLoader, RiskFactorDefLoader, AlphaLoader, ReturnsLoader, GeneralUniverseLoader, InvestableUniverseLoader]
 
     def test_riskConsistency(self):
@@ -37,6 +38,7 @@ class TestRiskCalculator(unittest.TestCase):
                 logging.debug('Validating schema for %s date %s', clazz, d)
                 df = loader.getDataAsOf(d)
                 assert df is not None and len(df) > 0
+                self.assertTrue(len(df.dtypes) == len(schema),f'Schema length mismatch for {clazz.__name__} date {d} vs {loader.getDates()[index - 1]} ')
                 self.assertTrue((df.dtypes==schema).all(),f'Schema mismatch for {clazz.__name__} date {d} vs {loader.getDates()[index - 1]} ')
                 totalRows += len(df)
             self.assertTrue(totalRows>0)

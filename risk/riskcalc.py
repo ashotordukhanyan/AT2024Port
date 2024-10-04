@@ -11,7 +11,7 @@ class RiskCalculator:
         self.asofdate = asofdate
         rfeLoader, rcLoader, rfdLoader = RiskFactorExposuresLoader(), RiskCorrLoader(), RiskFactorDefLoader()
         assert rfeLoader.getLatestAvailableDate(asofdate) == rcLoader.getLatestAvailableDate(asofdate) == rfdLoader.getLatestAvailableDate(asofdate)
-        self.riskFactorExposures = rfeLoader.getDataAsOf(asofdate)
+        self.riskFactorExposures = rfeLoader.getDataAsOf(asofdate).copy()
         self.riskFactorExposures['resid_SD_YR'] = self.riskFactorExposures['resid_SD'] * np.sqrt(12) #for some reason resid_SD is monthly
         self.riskCorr = rcLoader.getDataAsOf(asofdate)
         self.riskFactorDef = rfdLoader.getDataAsOf(asofdate).sort_values('Factor Number')

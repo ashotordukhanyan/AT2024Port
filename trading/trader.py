@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List
 from datetime import date, timedelta
 from dataload import InvestableUniverseLoader, AlphaLoader, ReturnsLoader
@@ -19,12 +20,17 @@ class Trader(ABC):
         #self.universe_loader = InvestableUniverseLoader()
         #self.alpha_loader = AlphaLoader()
         self.name = name or self.__class__.__name__
-        self.lastRebalanceDate = None
+        #self.lastRebalanceDate = None
 
     def saveStats(self,stats:Dict,dt:date):
-        fname = f'./stats/pstats_{self.name}_{dt.strftime("%Y%m%d")}.pkl'
+        fname = f'./statsos/pstats_{self.name}_{dt.strftime("%Y%m%d")}.pkl'
         with open(fname,'wb') as f:
             pickle.dump(stats,f)
+    def loadState(self,dt:date):
+        fname = f'./statsos/pstats_{self.name}_{dt.strftime("%Y%m%d")}.pkl'
+        with open(fname,'rb') as f:
+            stats = pickle.load(f)
+        self.portfolio = stats['holdings']
 
     def rescale(self,weights:np.ndarray,max_concentration:float, max_iterations = 10):
         ''' Rescale weights to ensure that long weights and short weights sum to 1 and -1 respectively without breaking max_concentration
@@ -80,7 +86,7 @@ class Trader(ABC):
         portStats['date'] = dt
         portStats['secData'] =  secData.loc[self.portfolio.keys()]['Name'].to_dict() #asset cusip -> name mapping
 
-        self.lastRebalanceDate = dt
+        #self.lastRebalanceDate = dt
         return portStats
 
     def updatePositions(self,tradable_universe:List[str],newWeights:np.ndarray) -> Dict[str,float]:
@@ -208,7 +214,7 @@ class Indiscriminate(Trader):
 
 class Guild:
     ''' A collection of PMs that each have access to the same alpha etc. data but trade independently'''
-    def __init__(self, traders:List[Trader]):
+    def __init__(self, traders:List[Trader], MULTITHREAD = False):
         self.traders = traders
         ##assert that the list of trader names is unique
         assert len(set([t.name for t in self.traders])) == len(self.traders)
@@ -217,6 +223,9 @@ class Guild:
         self.alpha_loader = AlphaLoader()
         self.returns_loader = ReturnsLoader()
         self.lastRebalanceDate = None
+        if MULTITHREAD:
+            self.executor = ThreadPoolExecutor(max_workers=len(self.traders))
+            self.executor.__enter__()
 
     def rebalance(self,dt:date, dryMode:bool = False):
         ''' Rebalance all PM portfolio for a given date
@@ -258,17 +267,27 @@ class Guild:
         assert len(alphas) == len(tradable_universe) and not any(np.isnan(alphas))
         assert len(txnCosts) == len(tradable_universe) and not any(np.isnan(txnCosts))
         assert len(shortingCosts) == len(tradable_universe ) and not any(np.isnan(shortingCosts))
-        for trader in self.traders:
+        #TODO - add ThreadPoolExecutor parralelization here to execute each trader on a separate thread
+        def _rebalTrader(trader):
             logging.warning('Rebalancing portfolio for %s', trader.name)
-            portStats = trader.rebalance(dt,tradable_universe,riskCal,alphas,txnCosts,shortingCosts,secData)
+            portStats = trader.rebalance(dt, tradable_universe, riskCal, alphas, txnCosts, shortingCosts, secData)
             portStats['dailyReturns'] = trader_returns[trader.name] if not firstRebalance else {}
             if not dryMode:
-                trader.saveStats(portStats,dt) #TODO UNCOMMENT
+                trader.saveStats(portStats, dt)
+            return True
+        if self.executor is not None:
+           waitForIt = list(self.executor.map(_rebalTrader,self.traders)) #map to list needed because returned gen is lazy
+        else:
+            for trader in self.traders:
+                _rebalTrader(trader)
         self.lastRebalanceDate = dt
-
+    def finish(self):
+        if self.executor is not None:
+            self.executor.__exit__(None,None,None)
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.WARNING,format='%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
     #trader = OptimizingTrader(alpha_multiplier=3.0, name='OptimizingTraderHA')
     traders = [ OptimizingTrader(name='OldSchool'),
                 OptimizingTrader(alpha_multiplier=3.0, name='Gambler'),
@@ -284,9 +303,19 @@ if __name__ == '__main__':
     ]
     ##traders = [OptimizingTrader(name='OldSchool')]
 
-    guild = Guild(traders)
+    guild = Guild(traders,MULTITHREAD=True)
     #for the sake of this exercise assume that we rebalance at the same frequency as alphas are available
+    LAST_CHECKPOINT_DATE = date(2020,11,25)
     rebalance_dates = guild.alpha_loader.getDates()
+    #earliest date for risk model
+    rebalance_dates = [rd for rd in rebalance_dates if rd >= date(2014, 8, 13) ]
+
+    if LAST_CHECKPOINT_DATE in rebalance_dates:
+        guild.lastRebalanceDate = LAST_CHECKPOINT_DATE
+        for t in guild.traders:
+            t.loadState(LAST_CHECKPOINT_DATE)
+        rebalance_dates = [d for d in rebalance_dates if d > LAST_CHECKPOINT_DATE]
 
     for d in tqdm(rebalance_dates):
         guild.rebalance(d, dryMode=False)
+    guild.finish()

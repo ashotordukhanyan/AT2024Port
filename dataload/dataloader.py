@@ -8,8 +8,9 @@ import pandas as pd
 import bisect
 
 #temp
-os.environ['DATA_DIR'] = 'C:/Users/orduk/PycharmProjects/AT2024Port/data' #TEMP
+##os.environ['DATA_DIR'] = 'C:/Users/orduk/PycharmProjects/AT2024Port/data' #TEMP
 _DATA_DIR = os.environ['DATA_DIR']
+print(f'Using data from {_DATA_DIR}')
 class CSVDataLoader:
     ''' Loads tabular data from a directory of CSV or txt files '''
     def __init__(self, data_dir:str, glob_file_pattern:str, sep:str=',', dtype:dict=None, skiprows=None, columns=None):
@@ -24,7 +25,8 @@ class CSVDataLoader:
     def getDates(self) -> List[date]:
         ''' Sorted list of dates for which this dataloader has data'''
         dates = []
-        for f in glob.glob(f'{self.data_dir}/{self.file_pattern}'):
+
+        for f in glob.glob(f'{self.data_dir}/{self.file_pattern}', recursive=True):
             fname = os.path.basename(f)
             match = re.search(r'(\d{8})', fname)
             if match:
@@ -62,7 +64,15 @@ class CSVDataLoader:
         df = pd.read_csv(fname,sep=self.sep,dtype=self.dtype, skiprows = self.skiprows, names=self.columns,\
                            encoding_errors='replace')
         #drop columns that begin with 'unused'
-        df = df[[c for c in df.columns if not c.startswith('unused')]]
+        df = df[[c for c in df.columns if not (c.lower().startswith('unused') or c.lower().startswith('unnamed'))]]
+
+        #cusip in some of the out of sample files comes as 9 char string (i.e. including check digit) - drop it
+        for cc in ['cusip','CUSIP']:
+            if cc in df.columns:
+                df[cc] = df[cc].str.slice(0,8)
+                # drop rows with duplicate cusips as well
+                df.drop_duplicates(subset=[cc], keep='last', inplace=True)
+
         return df
 
 class GeneralUniverseLoader(CSVDataLoader):
@@ -77,7 +87,7 @@ class InvestableUniverseLoader(CSVDataLoader):
 
 class ReturnsLoader(CSVDataLoader):
     def __init__(self):
-        super().__init__(_DATA_DIR+'/Returns', 'Returns*c.csv', sep=',', dtype={'CUSIP':str,'Return':float} )
+        super().__init__(_DATA_DIR+'/Returns', 'Returns*c.csv', sep=',', dtype={'CUSIP':str,'Return':float})
 
     def getDailyReturns(self,startDate:date, endDate:date,cusips:Optional[List[str]] = None) -> pd.DataFrame:
         ''' Get daily returns for a list of cusips between two dates (including start and end dates)'''
@@ -156,4 +166,11 @@ class RiskFactorExposuresLoader(CSVDataLoader):
     def __init__(self):
         super().__init__(_DATA_DIR +'/US 2_19_9g', 'RSQRM_US_v2_19_9g*_USDCusip.csv', sep=',', \
                          columns=RiskFactorExposuresLoader.ColumnNames(), dtype=RiskFactorExposuresLoader.ColumnTypes())
+
+    @functools.lru_cache(maxsize=4)
+    def readFile(self,fname:str) -> pd.DataFrame:
+        df = super().readFile(fname)
+        #out of sample data contains some synthetic assets with duplicate cusips - remove them
+        df = df[df.cusip != 'RSQRM_US']
+        return df
 
